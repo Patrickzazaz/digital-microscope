@@ -1,0 +1,70 @@
+import digitms
+import numpy as np
+import sys
+import serial
+from pypylon import pylon
+import threading
+# input setup
+def setup():
+    text1 = "Given boudary of cell"
+    print(text1)
+    print("="*len(text1))
+    wx = float(input("wx = "))
+    wy = float(input("wy = "))
+    dx = float(input("dx = "))
+    dy = float(input("dy = "))
+    # find number of row X and column Y
+    # out put 
+    Nx = int(-(-wx//dx))
+    Ny = int(-(-wy//dy))
+    num = Nx*Ny
+    print("="*len(text1))
+    print("Number of pixel in X axis: ",Nx)
+    print("Number of pixel in Y axis: ",Ny)
+    print("Number of pixel: ",num)
+    print("="*len(text1))
+    # Note: Hx,HY,dx,y from trail testing
+    # create dictionary for create condition
+    print("="*len(text1))
+    return Nx,Ny,dx,dy
+def gen_gcode(Nx,Ny,dx,dy):
+    # First, create number and possition
+    odx = np.arange(Nx+1)
+    # define possition X and Y each picture
+    psx = odx*dx
+    # set motion X axis to G-code 1 pattern
+    # start 0,1,2,...,Nx
+    # and slide to G1 X0 Ydy
+    # finally, set origine to G92 X0 Y0
+    xcom = np.array(["G1 X"])
+    gcodex = np.char.add(xcom,psx.astype(str)) # create text g-code motion x asxis
+    loop_gcode1 = gcodex.tolist() # transfrom by numpy to list
+    textg = "G1 X0 Y" + str(dy)
+    loop_gcode2 = loop_gcode1 + [textg,"G92 X0 Y0"]
+    loop_gcode3 = loop_gcode2*Ny
+    # add switch and close light
+    loop_gcode4 = ["M106 P0"]+loop_gcode3+["M107 P0"]
+    return loop_gcode4
+def live1(camera):
+    digitms.live_video(camera)
+def rep_op(ser,Nx,Ny,dx,dy):
+    # setting pylon and repitier
+    fullmess = gen_gcode(Nx,Ny,dx,dy)
+    digitms.sendmessage(ser,fullmess)
+def main():
+    camera = pylon.InstantCamera(pylon.TlFactory.GetInstance().CreateFirstDevice())
+    ser = serial.Serial('COM5', 115200, timeout=1)
+    (Nx,Ny,dx,dy) = setup()
+    # Creating threads for live video and G-code sending
+    # want live video and operate in same time
+    video_thread = threading.Thread(target=live1, args=(camera,))
+    sleep(4.0) # delay for ready
+    gcode_thread = threading.Thread(target=rep_op, args=(ser,Nx,Ny,dx,dy,))
+     # Starting threads
+    video_thread.start()
+    gcode_thread.start()
+     # join threads
+    video_thread.join()  
+    gcode_thread.join()
+
+main() # work start
